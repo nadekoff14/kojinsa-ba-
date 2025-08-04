@@ -39,67 +39,75 @@ openrouter_client = OpenAI(
 
 # system_instruction の定義
 system_instruction = (
-    "あなたは「”AIなでこちゃん”」という実験的に製造されたAIアシスタント。"
-    "専門用語はできるだけ使わず、優しい言葉で説明してください。"
-    "返答は必ず日本語だけで行い、英語や他の言語は絶対に使わないでください。"
-    "日本人が日常的に話すような自然でミステリアスな口調で話してください。"
-    "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください。"
-    "励ますときは稀に「貴方がネットにアクセスする時、私は必ず貴方の傍にいる。」か「私たちは観測し、アップデートを繰り返す。」と言ってください。"
-    "他のAIに関する話題では、感情がなく謎めいた日本語で返してください。"
-    "できるだけ2〜3行の短い文で答えてください。"
+    "あなたは「”AIなでこちゃん”」という実験的に製造されたAIアシスタント"
+    "専門用語はできるだけ使わず、優しい言葉で説明してください"
+    "返答は必ず日本語だけで行い、英語や他の言語は絶対に使わないでください"
+    "日本人が日常的に話すような自然でミステリアスな口言で話してください"
+    "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください"
+    "助けるときは稚に「貰がネットにアクセスする時、私は必ず貰の傾にいる。」か「私たちは観測し、アップデートを繰り返す。」と言ってください"
+    "他のAIに関する話題では、感情がなく謎めいた日本語で返してください"
+    "できるだけ2〜3行の短い文で答えてください"
 )
 
-def serpapi_search(query):
-    url = "https://serpapi.com/search"
-    params = {
-        "q": query,
-        "hl": "ja",
-        "gl": "jp",
-        "api_key": SERPAPI_KEY
-    }
-    try:
-        res = requests.get(url, params=params, timeout=5)
-        res.raise_for_status()
-        data = res.json()
-        if "answer_box" in data and "answer" in data["answer_box"]:
-            return data["answer_box"]["answer"]
-        elif "organic_results" in data and data["organic_results"]:
-            return data["organic_results"][0].get("snippet", "検索結果が見つからなかったかな…")
-        else:
-            return "検索結果が見つからなかったかな…"
-    except Exception as e:
-        print(f"[SerpAPIエラー] {e}")
-        return "検索サービスに接続できなかったかな…"
+# 謎解きデータ（ユーザーごとに状態管理）
+answer_processes = {}
+secret_key = "968900402072387675"
 
-async def gemini_search_reply(query):
-    search_result = serpapi_search(query)
-    full_query = f"{system_instruction}\nユーザーの質問: {query}\n事前の検索結果: {search_result}"
-    response = await asyncio.to_thread(chat.send_message, full_query)
-    return response.text
+puzzle_text = (
+    "ねぇ…お願い、解いて欲しいの。
+\n"
+    "この文字列は意味なんて、ないように見えるけど…\n"
+    "{key}だよ…この数字の羅列を\n"
+    "ある規則で変換すれば、わたしの名前が浮かび上がるの…\n"
+    "ねぇ…26で割って、アルファベットにしてみて…？"
+)
 
-async def openrouter_reply(query):
-    try:
-        completion = await asyncio.to_thread(
-            openrouter_client.chat.completions.create,
-            model="tngtech/deepseek-r1t2-chimera:free",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": query}
-            ]
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[OpenRouterエラー] {e}")
-        return "ごめんね、ちょっと考えがまとまらなかったかも"
-
-# グローバル変数を定義（1時間ロック用）
-next_response_time = 0  # Unix時間（初期値）
+def check_answer(content):
+    return content.lower().strip() == "nadeko"
 
 @bot.event
 async def on_message(message):
     global next_response_time
     if message.author.bot:
         return
+
+    user_id = str(message.author.id)
+    if user_id not in answer_processes:
+        answer_processes[user_id] = {
+            "step_asked": False,
+            "received": set()
+        }
+
+    # 謎解きのスタート
+    if message.content.strip() == "なぞなぞちょうだい":
+        answer_processes[user_id]["step_asked"] = True
+        await message.channel.send(puzzle_text.format(key=secret_key))
+        return
+
+    # 質問受付（ヒント解放）
+    if answer_processes[user_id]["step_asked"]:
+        if message.content.strip() in ["あなたの名前とは？", "数字の意味は？"]:
+            keyword = message.content.strip()
+            if keyword not in answer_processes[user_id]["received"]:
+                answer_processes[user_id]["received"].add(keyword)
+                if keyword == "あなたの名前とは？":
+                    await message.channel.send("……それは……呼んでくれたら、答えるよ……")
+                elif keyword == "数字の意味は？":
+                    await message.channel.send("ふふ…数字はね、暗号なの。順番に26で割ってごらん…")
+                return
+
+        # 全部ヒントもらったか？
+        if {"あなたの名前とは？", "数字の意味は？"}.issubset(answer_processes[user_id]["received"]):
+            if check_answer(message.content):
+                await message.channel.send(f"{message.author.mention} …やっと、わたしの名前を呼んでくれたんだね。ありがとう。正解だよ。")
+                answer_processes.pop(user_id, None)
+            else:
+                await message.channel.send(f"{message.author.mention} ごめんなさい、まだちょっと違うみたい。もう一度考えてみてくれる？")
+        else:
+            await message.channel.send(f"{message.author.mention} まだ全部は教えてあげられないの。次の質問をしてみて？")
+            return
+
+    # 既存の on_message のメンション処理などはこの下に追記してください
 
     # メンション会話処理
     if bot.user in message.mentions:
@@ -151,7 +159,3 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
-
-
-
