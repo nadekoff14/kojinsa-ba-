@@ -86,7 +86,9 @@ async def on_ready():
 
 
 async def on_message(message):
-print(f"受信: {message.content}")  # ここで出力されるか確認
+    print(f"受信: {message.content}")  # ここで出力されるか確認
+    ...
+
     global next_response_time
     if message.author.bot:
         return
