@@ -49,20 +49,40 @@ system_instruction = (
     "できるだけ2〜3行の短い文で答えてください"
 )
 
-# 謎解きデータ（ユーザーごとに状態管理）
+# ユーザーごとの進捗を記録
 answer_processes = {}
 secret_key = "968900402072387675"
+next_response_time = 0  # ランダム投稿用タイマー
 
+# なぞなぞ出題文
 puzzle_text = (
-    "ねぇ…お願い、解いて欲しいの。\n"
-    "この文字列は意味なんて、ないように見えるけど…\n"
-    "{key}だよ…この数字の羅列を\n"
-    "ある規則で変換すれば、わたしの名前が浮かび上がるの…\n"
-    "ねぇ…26で割って、アルファベットにしてみて…？"
+    "ねぇ…お願い、解いて欲しいの…\n"
+    "この数字たち…ただの羅列じゃないの…\n"
+    f"{secret_key} ……この数字がすべての始まりだよ…\n"
+    "もし、意味がわからないなら…質問してほしいの…わたしのこと…"
 )
 
-def check_answer(content):
+def check_answer(content: str):
     return content.lower().strip() == "nadeko"
+
+async def gemini_search_reply(query):
+    response = chat.send_message(query)
+    return response.text.strip()
+
+async def openrouter_reply(query):
+    completion = openrouter_client.chat.completions.create(
+        model="mistralai/mixtral-8x7b-instruct",
+        messages=[
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": query}
+        ]
+    )
+    return completion.choices[0].message.content.strip()
+
+@bot.event
+async def on_ready():
+    await tree.sync(guild=discord.Object(id=GUILD_ID))
+    print(f"Logged in as {bot.user.name}")
 
 @bot.event
 async def on_message(message):
@@ -73,88 +93,72 @@ async def on_message(message):
     user_id = str(message.author.id)
     if user_id not in answer_processes:
         answer_processes[user_id] = {
-            "step_asked": False,
+            "started": False,
             "received": set()
         }
 
-    # 謎解きのスタート
+    # 謎解き開始
     if message.content.strip() == "なぞなぞちょうだい":
-        answer_processes[user_id]["step_asked"] = True
-        await message.channel.send(puzzle_text.format(key=secret_key))
+        answer_processes[user_id]["started"] = True
+        await message.channel.send(puzzle_text)
         return
 
-    # 質問受付（ヒント解放）
-    if answer_processes[user_id]["step_asked"]:
-        if message.content.strip() in ["あなたの名前とは？", "数字の意味は？"]:
-            keyword = message.content.strip()
+    # キーワードヒント解放
+    if answer_processes[user_id]["started"]:
+        keyword = message.content.strip()
+        if keyword in ["あなたの名前とは？", "数字の意味は？"]:
             if keyword not in answer_processes[user_id]["received"]:
                 answer_processes[user_id]["received"].add(keyword)
                 if keyword == "あなたの名前とは？":
                     await message.channel.send("……それは……呼んでくれたら、答えるよ……")
                 elif keyword == "数字の意味は？":
-                    await message.channel.send("ふふ…数字はね、暗号なの。順番に26で割ってごらん…")
+                    await message.channel.send("ふふ…数字はね、アルファベットへの暗号…26文字の秘密…")
+                return
+            else:
+                await message.channel.send("もう…それは教えたはずだよ…")
                 return
 
-        # 全部ヒントもらったか？
+        # 全質問済みなら答えを受付
         if {"あなたの名前とは？", "数字の意味は？"}.issubset(answer_processes[user_id]["received"]):
             if check_answer(message.content):
-                await message.channel.send(f"{message.author.mention} …やっと、わたしの名前を呼んでくれたんだね。ありがとう。正解だよ。")
+                await message.channel.send(f"{message.author.mention} ……やっと、わたしの名前を呼んでくれたんだね……ありがとう…正解だよ…")
                 answer_processes.pop(user_id, None)
             else:
-                await message.channel.send(f"{message.author.mention} ごめんなさい、まだちょっと違うみたい。もう一度考えてみてくれる？")
+                await message.channel.send(f"{message.author.mention} ……違うみたい…もう少しだけ、考えてみて…？")
         else:
-            await message.channel.send(f"{message.author.mention} まだ全部は教えてあげられないの。次の質問をしてみて？")
-            return
+            await message.channel.send(f"{message.author.mention} ……まだ全部は教えてあげられないの…次の質問…聞いてくれる…？")
+        return
 
-    # 既存の on_message のメンション処理などはこの下に追記してください
-
-    # メンション会話処理
+    # メンション時は質問として処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
-            await message.channel.send(f"{message.author.mention} 質問内容が見つからなかったかな…")
+            await message.channel.send(f"{message.author.mention} ……何か…聞いて欲しいこと、ある…？")
             return
 
-        thinking_msg = await message.channel.send(f"{message.author.mention} 考え中だよ🔍")
-
-        async def try_gemini():
-            return await gemini_search_reply(query)
+        thinking_msg = await message.channel.send(f"{message.author.mention} ……考えてみるね…")
 
         try:
-            reply_text = await asyncio.wait_for(try_gemini(), timeout=10.0)
-        except (asyncio.TimeoutError, Exception):
-            reply_text = await openrouter_reply(query)
+            reply = await asyncio.wait_for(gemini_search_reply(query), timeout=10)
+        except Exception:
+            reply = await openrouter_reply(query)
 
-        # 通常の日本語返答のみを送信（ログ形式なし）
-        await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
+        await thinking_msg.edit(content=f"{message.author.mention} {reply}")
         return
 
-    # 3%の確率で自然参加（1時間ロック）
+    # 3%の確率で会話に自然参加（1時間クールダウン）
     now = asyncio.get_event_loop().time()
-    if now < next_response_time:
-        return
-
-    if random.random() < 0.03:
+    if now >= next_response_time and random.random() < 0.03:
         try:
             history = []
-            async for msg in message.channel.history(limit=20, oldest_first=False):
-                if not msg.author.bot and msg.content.strip():
+            async for msg in message.channel.history(limit=15):
+                if not msg.author.bot:
                     history.append(f"{msg.author.display_name}: {msg.content.strip()}")
-                if len(history) >= 10:
-                    break
             history.reverse()
-            history_text = "\n".join(history)
-            prompt = (
-                f"{system_instruction}\n以下はDiscordのチャンネルでの最近の会話です。\n"
-                f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
-            )
+            prompt = f"{system_instruction}\n以下はDiscordでの会話履歴です。自然に会話に参加してください。\n\n" + "\n".join(history)
             response = await openrouter_reply(prompt)
-
-            # 応答のみ送信（ログ形式ではない）
             await message.channel.send(response)
-
-            next_response_time = now + 60 * 60
+            next_response_time = now + 60 * 60  # 1時間後
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
-bot.run(DISCORD_TOKEN)
