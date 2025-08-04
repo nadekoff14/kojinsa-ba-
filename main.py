@@ -101,7 +101,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # 通常のメンション会話処理
+    # メンション会話処理
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
@@ -118,13 +118,14 @@ async def on_message(message):
         except (asyncio.TimeoutError, Exception):
             reply_text = await openrouter_reply(query)
 
+        # 通常の日本語返答のみを送信（ログ形式なし）
         await thinking_msg.edit(content=f"{message.author.mention} {reply_text}")
         return
 
-    # 3%の確率で返答。ただし1時間経過している必要あり
+    # 3%の確率で自然参加（1時間ロック）
     now = asyncio.get_event_loop().time()
     if now < next_response_time:
-        return  # まだロック中（発言から1時間経っていない）
+        return
 
     if random.random() < 0.03:
         try:
@@ -141,10 +142,11 @@ async def on_message(message):
                 f"これらを読んで自然に会話に入ってみてください。\n\n{history_text}"
             )
             response = await openrouter_reply(prompt)
+
+            # 応答のみ送信（ログ形式ではない）
             await message.channel.send(response)
 
-            # 成功したので次の発言許可時間を1時間後に設定
-            next_response_time = now + 60 * 60  # 60分 x 60秒
+            next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
