@@ -93,7 +93,7 @@ async def on_message(message):
 async def hello(ctx):
     await ctx.send("こんにちは")
 
-bot.run("OTY4OTAwNDAyMDcyMzg3Njc1.Ymlk0Q.uC32tOh2wN0nFKQ9DOiWeVHpkAo")
+bot.run(os.getenv("DISCORD_TOKEN"))
 
     global next_response_time
     if message.author.bot:
@@ -170,3 +170,4 @@ bot.run("OTY4OTAwNDAyMDcyMzg3Njc1.Ymlk0Q.uC32tOh2wN0nFKQ9DOiWeVHpkAo")
             next_response_time = now + 60 * 60  # 1時間後
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
+
