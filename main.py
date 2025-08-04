@@ -136,9 +136,31 @@ async def on_message(message):
 
     # メンション応答
     if bot.user in message.mentions:
-        # なぞなぞ投稿メッセージへの返信・リプライなら何も返さずスルー
-        # 返信かつ参照メッセージがなぞなぞ投稿ID
+        # なぞなぞ投稿へのリプライまたは引用メンションなら何も返さずスルー
+        is_reply_to_puzzle = False
+        is_quote_to_puzzle = False
+        # リプライ判定
         if message.reference and message.reference.message_id == puzzle_message_id:
+            is_reply_to_puzzle = True
+        # 引用（>）判定
+        if message.type == discord.MessageType.reply and message.reference:
+            try:
+                ref_msg = await message.channel.fetch_message(message.reference.message_id)
+                if ref_msg.id == puzzle_message_id:
+                    is_quote_to_puzzle = True
+            except Exception:
+                pass
+        # 通常の引用（> ...）にも対応
+        if message.content.startswith(">") and puzzle_message_id is not None:
+            try:
+                # 直近のなぞなぞ投稿を取得し、その内容が引用されているかチェック
+                puzzle_msg = await message.channel.fetch_message(puzzle_message_id)
+                if puzzle_msg.content in message.content:
+                    is_quote_to_puzzle = True
+            except Exception:
+                pass
+
+        if is_reply_to_puzzle or is_quote_to_puzzle:
             return
 
         # 通常のメンション返答処理
