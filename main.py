@@ -80,11 +80,6 @@ async def openrouter_reply(query):
     return completion.choices[0].message.content.strip()
 
 @bot.event
-async def on_ready():
-    await tree.sync(guild=discord.Object(id=GUILD_ID))
-    print(f"Logged in as {bot.user.name}")
-
-@bot.event
 async def on_message(message):
     global next_response_time
     if message.author.bot:
@@ -97,13 +92,11 @@ async def on_message(message):
             "received": set()
         }
 
-# 謎解き開始
-if "なぞなぞちょうだい" in message.content:
-    answer_processes[user_id]["started"] = True
-    await message.channel.send(puzzle_text)
-    return
-
-print(f"[DEBUG] 受信メッセージ: {message.content.strip()}")
+    # 謎解き開始
+    if message.content.strip() == "なぞなぞちょうだい":
+        answer_processes[user_id]["started"] = True
+        await message.channel.send(puzzle_text)
+        return
 
     # キーワードヒント解放
     if answer_processes[user_id]["started"]:
