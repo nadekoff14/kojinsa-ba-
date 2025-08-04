@@ -21,7 +21,7 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.messages = True  # 念のため追加
+intents.messages = True
 intents.members = True
 intents.presences = True
 bot = discord.Client(intents=intents)
@@ -38,7 +38,7 @@ openrouter_client = OpenAI(
     api_key=OPENROUTER_API_KEY
 )
 
-# system_instruction の定義
+# システム命令
 system_instruction = (
     "あなたは「”AIなでこちゃん”」という実験的に製造されたAIアシスタント"
     "専門用語はできるだけ使わず、優しい言葉で説明してください"
@@ -50,12 +50,11 @@ system_instruction = (
     "できるだけ2〜3行の短い文で答えてください"
 )
 
-# ユーザーごとの進捗を記録
+# なぞなぞ関連
 answer_processes = {}
 secret_key = "968900402072387675"
-next_response_time = 0  # ランダム投稿用タイマー
+next_response_time = 0
 
-# なぞなぞ出題文
 puzzle_text = (
     "ねぇ…お願い、解いて欲しいの…\n"
     "この数字たち…ただの羅列じゃないの…\n"
@@ -86,18 +85,13 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    print(f"メッセージ受信: {message.content}")
-    await bot.process_commands(message)  # 忘れずに
-
-@bot.command()
-async def hello(ctx):
-    await ctx.send("こんにちは")
-
-bot.run(os.getenv("DISCORD_TOKEN"))
-
     global next_response_time
+
+    print(f"メッセージ受信: {message.content}")
     if message.author.bot:
         return
+
+    await bot.process_commands(message)
 
     user_id = str(message.author.id)
     if user_id not in answer_processes:
@@ -112,7 +106,7 @@ bot.run(os.getenv("DISCORD_TOKEN"))
         await message.channel.send(puzzle_text)
         return
 
-    # キーワードヒント解放
+    # ヒント対応
     if answer_processes[user_id]["started"]:
         keyword = message.content.strip()
         if keyword in ["あなたの名前とは？", "数字の意味は？"]:
@@ -127,7 +121,6 @@ bot.run(os.getenv("DISCORD_TOKEN"))
                 await message.channel.send("もう…それは教えたはずだよ…")
                 return
 
-        # 全質問済みなら答えを受付
         if {"あなたの名前とは？", "数字の意味は？"}.issubset(answer_processes[user_id]["received"]):
             if check_answer(message.content):
                 await message.channel.send(f"{message.author.mention} ……やっと、わたしの名前を呼んでくれたんだね……ありがとう…正解だよ…")
@@ -138,7 +131,7 @@ bot.run(os.getenv("DISCORD_TOKEN"))
             await message.channel.send(f"{message.author.mention} ……まだ全部は教えてあげられないの…次の質問…聞いてくれる…？")
         return
 
-    # メンション時は質問として処理
+    # メンション応答
     if bot.user in message.mentions:
         query = message.content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
@@ -155,7 +148,7 @@ bot.run(os.getenv("DISCORD_TOKEN"))
         await thinking_msg.edit(content=f"{message.author.mention} {reply}")
         return
 
-    # 3%の確率で会話に自然参加（1時間クールダウン）
+    # ランダム参加
     now = asyncio.get_event_loop().time()
     if now >= next_response_time and random.random() < 0.03:
         try:
@@ -167,7 +160,14 @@ bot.run(os.getenv("DISCORD_TOKEN"))
             prompt = f"{system_instruction}\n以下はDiscordでの会話履歴です。自然に会話に参加してください。\n\n" + "\n".join(history)
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-            next_response_time = now + 60 * 60  # 1時間後
+            next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
+
+@bot.command()
+async def hello(ctx):
+    await ctx.send("こんにちは…調子はどうかな…？")
+
+bot.run(DISCORD_TOKEN)
+
 
