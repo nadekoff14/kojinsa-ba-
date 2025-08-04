@@ -84,10 +84,16 @@ async def openrouter_reply(query):
 async def on_ready():
     print(f"ログインしました: {bot.user}")
 
-
+@bot.event
 async def on_message(message):
-    print(f"受信: {message.content}")  # ここで出力されるか確認
-    ...
+    print(f"メッセージ受信: {message.content}")
+    await bot.process_commands(message)  # 忘れずに
+
+@bot.command()
+async def hello(ctx):
+    await ctx.send("こんにちは")
+
+bot.run("OTY4OTAwNDAyMDcyMzg3Njc1.Ymlk0Q.uC32tOh2wN0nFKQ9DOiWeVHpkAo")
 
     global next_response_time
     if message.author.bot:
