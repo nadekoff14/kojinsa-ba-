@@ -1,4 +1,4 @@
-import os 
+import os
 import discord
 import asyncio
 import random
@@ -6,7 +6,6 @@ import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
 from openai import OpenAI
-from discord import app_commands
 from discord.ext import tasks
 from discord.ui import Modal, View, Button, TextInput
 
@@ -25,7 +24,6 @@ intents.messages = True
 intents.members = True
 intents.presences = True
 bot = discord.Client(intents=intents)
-tree = app_commands.CommandTree(bot)
 
 # Gemini 設定
 genai.configure(api_key=GEMINI_API_KEY)
@@ -90,8 +88,6 @@ async def on_message(message):
     print(f"メッセージ受信: {message.content}")
     if message.author.bot:
         return
-
-    await bot.process_commands(message)
 
     user_id = str(message.author.id)
     if user_id not in answer_processes:
@@ -164,10 +160,7 @@ async def on_message(message):
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
-@bot.command()
-async def hello(ctx):
-    await ctx.send("こんにちは…調子はどうかな…？")
-
 bot.run(DISCORD_TOKEN)
+
 
 
