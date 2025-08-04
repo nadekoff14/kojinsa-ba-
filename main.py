@@ -21,6 +21,7 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID", "0"))
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.messages = True  # 念のため追加
 intents.members = True
 intents.presences = True
 bot = discord.Client(intents=intents)
@@ -80,7 +81,12 @@ async def openrouter_reply(query):
     return completion.choices[0].message.content.strip()
 
 @bot.event
+async def on_ready():
+    print(f"ログインしました: {bot.user}")
+
+
 async def on_message(message):
+print(f"受信: {message.content}")  # ここで出力されるか確認
     global next_response_time
     if message.author.bot:
         return
