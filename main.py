@@ -97,11 +97,13 @@ async def on_message(message):
             "received": set()
         }
 
-    # 謎解き開始
-    if message.content.strip() == "なぞなぞちょうだい":
-        answer_processes[user_id]["started"] = True
-        await message.channel.send(puzzle_text)
-        return
+# 謎解き開始
+if "なぞなぞちょうだい" in message.content:
+    answer_processes[user_id]["started"] = True
+    await message.channel.send(puzzle_text)
+    return
+
+print(f"[DEBUG] 受信メッセージ: {message.content.strip()}")
 
     # キーワードヒント解放
     if answer_processes[user_id]["started"]:
@@ -161,4 +163,3 @@ async def on_message(message):
             next_response_time = now + 60 * 60  # 1時間後
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
-
