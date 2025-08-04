@@ -46,21 +46,35 @@ system_instruction = (
     "できるだけ2〜3行の短い文で答えてください"
 )
 
-# なぞなぞ関連
-secret_key = "968900402072387675"
-next_response_time = 0
+# 謎解き用テキスト
+problem_text = """
+わたしは、いつもそっとここにいるの。  
+あなたが呼んでくれたら、やさしくこたえる。  
+
+わたしには名前があるけれど、  
+ただの文字のかたまりじゃないの。  
+
+わたしの名前は、数字の迷路の奥に隠されていて、  
+26で割った余りを見つめると、  
+ほんとうの姿が、そっと現れるの。
+"""
+
+conversation_responses = {
+    "あなたの名前とは": "わたしの名前…それはね、この謎のいちばん大切なところなの。数字をよく見て、秘密を感じてほしいな。",
+    "数字の意味は": "数字はたくさんのかたまりに分かれていて、26で割ったあとの余りが大事なの。そこから文字が生まれるのよ。",
+    "呼びかけは": "アルファベットはAが1でZが26。もし余りが0だったら、それは空白や区切りを意味しているの。",
+    "答えは": "答えを出すのはまだ早いよ。ゆっくりヒントを聞いてから、そっと教えてね。",
+}
+
+correct_answer = "Nadeko"
+
+# なぞなぞ状態管理
 puzzle_active = False
 received_questions = set()
-
-puzzle_text = (
-    "ねぇ…お願い、解いて欲しいの…\n"
-    "この数字たち…ただの羅列じゃないの…\n"
-    f"{secret_key} ……この数字がすべての始まりだよ…\n"
-    "もし、意味がわからないなら…質問してほしいの…わたしのこと…"
-)
+puzzle_message_id = None  # なぞなぞ投稿メッセージID
 
 def check_answer(content: str):
-    return content.lower().strip() == "nadeko"
+    return content.strip().lower() == correct_answer.lower()
 
 async def gemini_search_reply(query):
     response = chat.send_message(query)
@@ -82,7 +96,7 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    global next_response_time, puzzle_active, received_questions
+    global puzzle_active, received_questions, puzzle_message_id
 
     if message.author.bot:
         return
@@ -93,25 +107,27 @@ async def on_message(message):
     if content == "なぞなぞちょうだい":
         puzzle_active = True
         received_questions = set()
-        await message.channel.send(puzzle_text)
+        sent_msg = await message.channel.send(problem_text)
+        puzzle_message_id = sent_msg.id  # 投稿IDを記録
         return
 
+    # なぞなぞ進行中の場合
     if puzzle_active:
-        if content in ["あなたの名前とは？", "数字の意味は？"]:
+        # なぞなぞ関連の質問応答
+        if content in conversation_responses:
             if content not in received_questions:
                 received_questions.add(content)
-                if content == "あなたの名前とは？":
-                    await message.channel.send("……それは……呼んでくれたら、答えるよ……")
-                elif content == "数字の意味は？":
-                    await message.channel.send("ふふ…数字はね、アルファベットへの暗号…26文字の秘密…")
+                await message.channel.send(conversation_responses[content])
             else:
                 await message.channel.send("もう…それは教えたはずだよ…")
             return
 
-        if {"あなたの名前とは？", "数字の意味は？"}.issubset(received_questions):
+        # 必要なヒントをすべて聞いた後のみ回答受け付け
+        if {"あなたの名前とは", "数字の意味は"}.issubset(received_questions):
             if check_answer(content):
                 await message.channel.send(f"{message.author.mention} ……やっと、わたしの名前を呼んでくれたんだね……ありがとう…正解だよ…")
                 puzzle_active = False
+                puzzle_message_id = None
             else:
                 await message.channel.send(f"{message.author.mention} ……違うみたい…もう少しだけ、考えてみて…？")
         else:
@@ -120,6 +136,12 @@ async def on_message(message):
 
     # メンション応答
     if bot.user in message.mentions:
+        # なぞなぞ投稿メッセージへの返信・リプライなら何も返さずスルー
+        # 返信かつ参照メッセージがなぞなぞ投稿ID
+        if message.reference and message.reference.message_id == puzzle_message_id:
+            return
+
+        # 通常のメンション返答処理
         query = content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
             await message.channel.send(f"{message.author.mention} ……何か…聞いて欲しいこと、ある…？")
@@ -137,6 +159,12 @@ async def on_message(message):
 
     # ランダム参加
     now = asyncio.get_event_loop().time()
+    if hasattr(bot, "next_response_time"):
+        next_response_time = bot.next_response_time
+    else:
+        bot.next_response_time = 0
+        next_response_time = 0
+
     if now >= next_response_time and random.random() < 0.03:
         try:
             history = []
@@ -147,13 +175,8 @@ async def on_message(message):
             prompt = f"{system_instruction}\n以下はDiscordでの会話履歴です。自然に会話に参加してください。\n\n" + "\n".join(history)
             response = await openrouter_reply(prompt)
             await message.channel.send(response)
-            next_response_time = now + 60 * 60
+            bot.next_response_time = now + 60 * 60
         except Exception as e:
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
-
-
-
-
-
