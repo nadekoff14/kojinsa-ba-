@@ -1,4 +1,4 @@
-import os
+import os 
 import discord
 import asyncio
 import random
@@ -6,8 +6,6 @@ import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
 from openai import OpenAI
-from discord.ext import tasks
-from discord.ui import Modal, View, Button, TextInput
 
 load_dotenv()
 
@@ -43,15 +41,16 @@ system_instruction = (
     "返答は必ず日本語だけで行い、英語や他の言語は絶対に使わないでください"
     "日本人が日常的に話すような自然でミステリアスな口言で話してください"
     "語尾は「だよ・・・」「ね・・・」「〜かな・・・」などでミステリアスにしてください"
-    "助けるときは稚に「貰がネットにアクセスする時、私は必ず貰の傾にいる。」か「私たちは観測し、アップデートを繰り返す。」と言ってください"
+    "励ます時は、「私たちは観測し、アップデートを繰り返す。」と言ってください"
     "他のAIに関する話題では、感情がなく謎めいた日本語で返してください"
     "できるだけ2〜3行の短い文で答えてください"
 )
 
 # なぞなぞ関連
-answer_processes = {}
 secret_key = "968900402072387675"
 next_response_time = 0
+puzzle_active = False
+received_questions = set()
 
 puzzle_text = (
     "ねぇ…お願い、解いて欲しいの…\n"
@@ -83,44 +82,36 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    global next_response_time
+    global next_response_time, puzzle_active, received_questions
 
-    print(f"メッセージ受信: {message.content}")
     if message.author.bot:
         return
 
-    user_id = str(message.author.id)
-    if user_id not in answer_processes:
-        answer_processes[user_id] = {
-            "started": False,
-            "received": set()
-        }
+    content = message.content.strip()
 
-    # 謎解き開始
-    if message.content.strip() == "なぞなぞちょうだい":
-        answer_processes[user_id]["started"] = True
+    # なぞなぞ開始
+    if content == "なぞなぞちょうだい":
+        puzzle_active = True
+        received_questions = set()
         await message.channel.send(puzzle_text)
         return
 
-    # ヒント対応
-    if answer_processes[user_id]["started"]:
-        keyword = message.content.strip()
-        if keyword in ["あなたの名前とは？", "数字の意味は？"]:
-            if keyword not in answer_processes[user_id]["received"]:
-                answer_processes[user_id]["received"].add(keyword)
-                if keyword == "あなたの名前とは？":
+    if puzzle_active:
+        if content in ["あなたの名前とは？", "数字の意味は？"]:
+            if content not in received_questions:
+                received_questions.add(content)
+                if content == "あなたの名前とは？":
                     await message.channel.send("……それは……呼んでくれたら、答えるよ……")
-                elif keyword == "数字の意味は？":
+                elif content == "数字の意味は？":
                     await message.channel.send("ふふ…数字はね、アルファベットへの暗号…26文字の秘密…")
-                return
             else:
                 await message.channel.send("もう…それは教えたはずだよ…")
-                return
+            return
 
-        if {"あなたの名前とは？", "数字の意味は？"}.issubset(answer_processes[user_id]["received"]):
-            if check_answer(message.content):
+        if {"あなたの名前とは？", "数字の意味は？"}.issubset(received_questions):
+            if check_answer(content):
                 await message.channel.send(f"{message.author.mention} ……やっと、わたしの名前を呼んでくれたんだね……ありがとう…正解だよ…")
-                answer_processes.pop(user_id, None)
+                puzzle_active = False
             else:
                 await message.channel.send(f"{message.author.mention} ……違うみたい…もう少しだけ、考えてみて…？")
         else:
@@ -129,7 +120,7 @@ async def on_message(message):
 
     # メンション応答
     if bot.user in message.mentions:
-        query = message.content.replace(f"<@{bot.user.id}>", "").strip()
+        query = content.replace(f"<@{bot.user.id}>", "").strip()
         if not query:
             await message.channel.send(f"{message.author.mention} ……何か…聞いて欲しいこと、ある…？")
             return
@@ -161,6 +152,8 @@ async def on_message(message):
             print(f"[履歴会話エラー] {e}")
 
 bot.run(DISCORD_TOKEN)
+
+
 
 
 
