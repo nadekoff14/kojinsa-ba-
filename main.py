@@ -432,9 +432,7 @@ async def on_message(message):
                 elif "ヴィジュネル暗号" in content or "ヴィジュネル" in content or "vigenere" in lower or "ヴィジュネル暗号" in lower:
                     rep = await channel.send("・・・ヴィジュネル暗号それかもしれない・・・アルファベットをアルファベットの鍵で解く暗号だよね・・・解いてみて")
                     # provide the cipher and key as hint (spec earlier provided the key)
-                    hint_msg = await channel.send(f"暗号: **{CIPHER_TEXT}**\n鍵: **{CIPHER_KEY}**\n（鍵はあなたの名前のヒントにもなっているよ・・・）")
                     event_messages.append(rep)
-                    event_messages.append(hint_msg)
                 # FINAL: check for answer (OBSERVATION)
                 if ANSWER.lower() in content.lower():
                     # final sequence
@@ -577,3 +575,4 @@ async def summarize_logs(channel):
 # ボット起動
 # ---------------------
 bot.run(DISCORD_TOKEN)
+
